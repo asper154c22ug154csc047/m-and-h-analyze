@@ -2,179 +2,151 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
-import plotly.graph_objects as go
-from sklearn.cluster import KMeans, DBSCAN, OPTICS, Birch
+from sklearn.cluster import KMeans, DBSCAN, OPTICS, Birch, HDBSCAN
 from sklearn.mixture import GaussianMixture
 from sklearn_extra.cluster import KMedoids
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import silhouette_score
-import hdbscan
 import io
-from sklearn.cluster import HDBSCAN # Use sklearn's version instead of the standalone hdbscan
-
-
 
 # --- Page Config ---
-st.set_page_config(page_title="Human Stress Clustering Dashboard", layout="wide")
+st.set_page_config(page_title="Human Stress Analysis", layout="wide", page_icon="🧠")
 
-# --- Custom Styling ---
+# --- Professional Styling ---
 st.markdown("""
     <style>
-    .main { background-color: #f5f7f9; }
-    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .main { background-color: #f8f9fa; }
+    .stMetric { background-color: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    h1 { color: #1E3A8A; font-family: 'Helvetica Neue', sans-serif; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- Title and Description ---
-st.title("📊 Perbandingan Algoritma Klastering Tingkat Stress")
+# --- Title Section ---
+st.title("🧠 Human Stress Level Clustering Analysis")
 st.markdown("""
-This application analyzes human stress levels (modeled via COVID-19 impact data) using various clustering techniques. 
-The **Stress Index** is calculated based on societal demand factors: *Confirmed Cases (40%), Deaths (40%), and Active Cases (20%).*
+**Research Objective:** To categorize human stress levels based on environmental demands using 
+various clustering techniques. This index uses COVID-19 impact data as a proxy for societal pressure.
 """)
 
 # --- Data Loading ---
 @st.cache_data
-def load_data():
-    # Using the provided dataset structure
-    data = """Country/Region,Confirmed,Deaths,Recovered,Active,New cases,New deaths,New recovered,Deaths / 100 Cases,Recovered / 100 Cases,Deaths / 100 Recovered,Confirmed last week,1 week change,1 week % increase,WHO Region
-Afghanistan,36263,1269,25198,9796,106,10,18,3.5,69.49,5.04,35526,737,2.07,Eastern Mediterranean
-Albania,4880,144,2745,1991,117,6,63,2.95,56.25,5.25,4171,709,17.0,Europe
-Algeria,27973,1163,18837,7973,616,8,749,4.16,67.34,6.17,23691,4282,18.07,Africa
-Andorra,907,52,803,52,10,0,0,5.73,88.53,6.48,884,23,2.6,Europe
-Angola,950,41,242,667,18,1,0,4.32,25.47,16.94,749,201,26.84,Africa
-Argentina,167416,3059,72575,91782,4890,120,2057,1.83,43.35,4.21,130774,36642,28.02,Americas
-Australia,15303,167,9311,5825,368,6,137,1.09,60.84,1.79,12428,2875,23.13,Western Pacific
-Brazil,2442375,87618,1846641,508116,23284,614,33728,3.59,75.61,4.74,2118646,323729,15.28,Americas
-US,4290259,148011,1325804,2816444,56336,1076,27941,3.45,30.9,11.16,3834677,455582,11.88,Americas
-India,1480073,33408,951166,495499,44457,637,33598,2.26,64.26,3.51,1155338,324735,28.11,South-East Asia
+def get_dataframe():
+    # Attempt to load local file, fallback to internal sample if missing
+    try:
+        df = pd.read_csv("country_wise_latest.csv")
+    except:
+        # Mini sample of your data for emergency fallback
+        data = """Country/Region,Confirmed,Deaths,Recovered,Active
+Afghanistan,36263,1269,25198,9796
+Albania,4880,144,2745,1991
+Algeria,27973,1163,18837,7973
+Argentina,167416,3059,72575,91782
+Brazil,2442375,87618,1846641,508116
+US,4290259,148011,1325804,2816444
+India,1480073,33408,951166,495499
+UK,301708,45844,1437,254427
 """
-    # In a real app, use: df = pd.read_csv('country_wise_latest.csv')
-    # For this demo, we'll read the string provided or use the file if uploaded
-    df = pd.read_csv(io.StringIO(data)) 
+        df = pd.read_csv(io.StringIO(data))
     
     # Preprocessing
-    df = df[['Country/Region', 'Confirmed', 'Deaths', 'Recovered', 'Active']]
+    df = df[['Country/Region', 'Confirmed', 'Deaths', 'Recovered', 'Active']].dropna()
+    
+    # Stress Index Formula: (Confirmed*0.4) + (Deaths*0.4) + (Active*0.2)
     df['Stress_Index'] = (df['Confirmed'] * 0.4) + (df['Deaths'] * 0.4) + (df['Active'] * 0.2)
     return df
 
-df_raw = load_data()
+df = get_dataframe()
 
-# --- Sidebar Controls ---
-st.sidebar.header("Configuration")
-algorithm_choice = st.sidebar.selectbox(
-    "Select Clustering Algorithm",
-    ("K-Means (Baseline)", "K-Medoids", "DBSCAN", "OPTICS", "HDBSCAN", "Gaussian Mixture", "BIRCH (Grid-based)")
+# --- Sidebar ---
+st.sidebar.header("🕹️ Control Panel")
+st.sidebar.subheader("Algorithm Selection")
+algo = st.sidebar.selectbox(
+    "Choose Algorithm",
+    ("K-Means", "K-Medoids", "DBSCAN", "OPTICS", "HDBSCAN", "Gaussian Mixture", "BIRCH (Grid-based)")
 )
 
-n_clusters = st.sidebar.slider("Number of Clusters (k)", 2, 5, 3)
+if algo in ["K-Means", "K-Medoids", "Gaussian Mixture", "BIRCH (Grid-based)"]:
+    k = st.sidebar.slider("Number of Clusters (k)", 2, 6, 3)
+else:
+    st.sidebar.info("This algorithm determines cluster count automatically.")
 
 # --- Data Preparation ---
 scaler = MinMaxScaler()
-cols_to_scale = ['Confirmed', 'Deaths', 'Recovered', 'Active', 'Stress_Index']
-df_scaled = scaler.fit_transform(df_raw[cols_to_scale])
+features = ['Confirmed', 'Deaths', 'Recovered', 'Active', 'Stress_Index']
+df_scaled = scaler.fit_transform(df[features])
 
-# --- Clustering Logic ---
+# --- Clustering Execution ---
+model_name = algo
 labels = None
-model_name = ""
 
-if algorithm_choice == "K-Means (Baseline)":
-    model = KMeans(n_clusters=n_clusters, random_state=42)
+if algo == "K-Means":
+    model = KMeans(n_clusters=k, random_state=42, n_init=10)
     labels = model.fit_predict(df_scaled)
-    model_name = "K-Means"
-# ... inside the logic ...
-elif algorithm_choice == "HDBSCAN":
+elif algo == "K-Medoids":
+    model = KMedoids(n_clusters=k, random_state=42)
+    labels = model.fit_predict(df_scaled)
+elif algo == "DBSCAN":
+    model = DBSCAN(eps=0.15, min_samples=2)
+    labels = model.fit_predict(df_scaled)
+elif algo == "OPTICS":
+    model = OPTICS(min_samples=3)
+    labels = model.fit_predict(df_scaled)
+elif algo == "HDBSCAN":
     model = HDBSCAN(min_cluster_size=2)
     labels = model.fit_predict(df_scaled)
-    model_name = "HDBSCAN"
-    
-elif algorithm_choice == "K-Medoids":
-    model = KMedoids(n_clusters=n_clusters, random_state=42)
+elif algo == "Gaussian Mixture":
+    model = GaussianMixture(n_components=k, random_state=42)
     labels = model.fit_predict(df_scaled)
-    model_name = "K-Medoids"
-
-elif algorithm_choice == "DBSCAN":
-    eps = st.sidebar.number_input("Epsilon", 0.01, 1.0, 0.1)
-    model = DBSCAN(eps=eps, min_samples=2)
+elif algo == "BIRCH (Grid-based)":
+    model = Birch(n_clusters=k)
     labels = model.fit_predict(df_scaled)
-    model_name = "DBSCAN"
 
-elif algorithm_choice == "OPTICS":
-    model = OPTICS(min_samples=2)
-    labels = model.fit_predict(df_scaled)
-    model_name = "OPTICS"
+df['Cluster'] = labels.astype(str)
 
-elif algorithm_choice == "HDBSCAN":
-    model = hdbscan.HDBSCAN(min_cluster_size=2)
-    labels = model.fit_predict(df_scaled)
-    model_name = "HDBSCAN"
+# --- Logic: Auto-Label Stress Levels ---
+# Calculate mean stress index per cluster to rank them
+rank = df.groupby('Cluster')['Stress_Index'].mean().sort_values().index
+label_map = {rank[i]: ["Low Stress", "Medium Stress", "High Stress", "Extreme"][min(i, 3)] for i in range(len(rank))}
+df['Stress_Level'] = df['Cluster'].map(label_map)
 
-elif algorithm_choice == "Gaussian Mixture":
-    model = GaussianMixture(n_components=n_clusters, random_state=42)
-    labels = model.fit_predict(df_scaled)
-    model_name = "GMM"
-
-elif algorithm_choice == "BIRCH (Grid-based)":
-    model = Birch(n_clusters=n_clusters)
-    labels = model.fit_predict(df_scaled)
-    model_name = "BIRCH"
-
-df_raw['Cluster'] = labels.astype(str)
-
-# --- Main Dashboard ---
-col1, col2 = st.columns([2, 1])
+# --- Visualization Section ---
+col1, col2 = st.columns([3, 1])
 
 with col1:
-    st.subheader(f"Visualization: {model_name}")
-    # Professional Plotly Chart
+    st.subheader(f"Results: {algo} Analysis")
     fig = px.scatter(
-        df_raw, 
-        x="Confirmed", 
-        y="Deaths", 
-        color="Cluster",
-        size="Stress_Index",
-        hover_name="Country/Region",
-        template="plotly_white",
-        color_discrete_sequence=px.colors.qualitative.Safe
+        df, x="Confirmed", y="Deaths", color="Stress_Level",
+        size="Stress_Index", hover_name="Country/Region",
+        color_discrete_map={
+            "Low Stress": "#22C55E",
+            "Medium Stress": "#EAB308",
+            "High Stress": "#EF4444",
+            "Extreme": "#7F1D1D"
+        },
+        template="plotly_white"
     )
     st.plotly_chart(fig, use_container_width=True)
 
 with col2:
-    st.subheader("Clustering Metrics")
+    st.subheader("Efficiency")
     try:
         score = silhouette_score(df_scaled, labels)
-        st.metric("Silhouette Score", f"{score:.4f}")
-        st.write("Score measures how similar an object is to its own cluster compared to others. (Higher is better)")
+        st.metric("Silhouette Score", f"{score:.3f}")
     except:
-        st.warning("Could not calculate Silhouette Score (requires at least 2 clusters).")
+        st.write("Score N/A")
+    
+    st.write("**Quick Stats:**")
+    st.write(f"Total Countries: {len(df)}")
+    st.write(f"Detected Clusters: {len(df['Cluster'].unique())}")
 
-    st.subheader("Stress Index Distribution")
-    fig_hist = px.histogram(df_raw, x="Stress_Index", nbins=10, title="Data Density")
-    st.plotly_chart(fig_hist, use_container_width=True)
-
-# --- Data Table Section ---
+# --- Data Table ---
 st.divider()
-st.subheader("Clustered Data Preview")
-
-# Define Stress Level based on Cluster Mean
-cluster_means = df_raw.groupby('Cluster')['Stress_Index'].mean().sort_values()
-stress_map = {cluster: "Low" for cluster in cluster_means.index}
-if len(cluster_means) >= 2:
-    stress_map[cluster_means.index[-1]] = "High Stress"
-if len(cluster_means) >= 3:
-    stress_map[cluster_means.index[0]] = "Low Stress"
-    stress_map[cluster_means.index[1]] = "Medium Stress"
-
-df_raw['Stress_Level'] = df_raw['Cluster'].map(stress_map)
-
-st.dataframe(df_raw[['Country/Region', 'Stress_Index', 'Cluster', 'Stress_Level']].sort_values(by="Stress_Index", ascending=False), use_container_width=True)
-
-# --- Download Section ---
-csv = df_raw.to_csv(index=False).encode('utf-8')
-st.download_button(
-    label="Download Clustered Data as CSV",
-    data=csv,
-    file_name='stress_clusters.csv',
-    mime='text/csv',
-
+st.subheader("Detailed stress Assessment Report")
+st.dataframe(
+    df[['Country/Region', 'Stress_Index', 'Stress_Level', 'Cluster']].sort_values("Stress_Index", ascending=False),
+    use_container_width=True
 )
 
+# --- Download ---
+csv = df.to_csv(index=False).encode('utf-8')
+st.download_button("📥 Download Analysis Report", data=csv, file_name="stress_analysis.csv", mime="text/csv")
