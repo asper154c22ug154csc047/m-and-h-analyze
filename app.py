@@ -10,6 +10,13 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import silhouette_score
 import hdbscan
 import io
+from sklearn.cluster import HDBSCAN # Use sklearn's version instead of the standalone hdbscan
+
+# ... inside the logic ...
+elif algorithm_choice == "HDBSCAN":
+    model = HDBSCAN(min_cluster_size=2)
+    labels = model.fit_predict(df_scaled)
+    model_name = "HDBSCAN"
 
 # --- Page Config ---
 st.set_page_config(page_title="Human Stress Clustering Dashboard", layout="wide")
@@ -167,4 +174,5 @@ st.download_button(
     data=csv,
     file_name='stress_clusters.csv',
     mime='text/csv',
+
 )
