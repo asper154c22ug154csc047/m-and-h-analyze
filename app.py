@@ -12,11 +12,7 @@ import hdbscan
 import io
 from sklearn.cluster import HDBSCAN # Use sklearn's version instead of the standalone hdbscan
 
-# ... inside the logic ...
-elif algorithm_choice == "HDBSCAN":
-    model = HDBSCAN(min_cluster_size=2)
-    labels = model.fit_predict(df_scaled)
-    model_name = "HDBSCAN"
+
 
 # --- Page Config ---
 st.set_page_config(page_title="Human Stress Clustering Dashboard", layout="wide")
@@ -85,7 +81,12 @@ if algorithm_choice == "K-Means (Baseline)":
     model = KMeans(n_clusters=n_clusters, random_state=42)
     labels = model.fit_predict(df_scaled)
     model_name = "K-Means"
-
+# ... inside the logic ...
+elif algorithm_choice == "HDBSCAN":
+    model = HDBSCAN(min_cluster_size=2)
+    labels = model.fit_predict(df_scaled)
+    model_name = "HDBSCAN"
+    
 elif algorithm_choice == "K-Medoids":
     model = KMedoids(n_clusters=n_clusters, random_state=42)
     labels = model.fit_predict(df_scaled)
@@ -176,3 +177,4 @@ st.download_button(
     mime='text/csv',
 
 )
+
