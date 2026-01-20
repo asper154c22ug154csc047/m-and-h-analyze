@@ -10,9 +10,9 @@ from sklearn.metrics import silhouette_score
 import io
 
 # --- Page Config ---
-st.set_page_config(page_title="Human Stress Analysis", layout="wide", page_icon="🧠")
+st.set_page_config(page_title="Stress Level Analysis", layout="wide", page_icon="🧠")
 
-# --- Custom UI Styling ---
+# --- UI Styling ---
 st.markdown("""
     <style>
     .main { background-color: #f8f9fa; }
@@ -22,28 +22,32 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 st.title("🧠 Human Stress Level Clustering Analysis")
-st.markdown("Comparing **K-Means**, **K-Medoids**, and Density/Grid-based algorithms.")
 
 # --- Data Loading ---
 @st.cache_data
 def load_data():
     try:
-        # Load the CSV file provided in the directory
+        # Load your CSV
         df = pd.read_csv("country_wise_latest.csv")
     except:
-        st.error("Dataset 'country_wise_latest.csv' not found in repository!")
-        st.stop()
+        st.warning("⚠️ CSV File not found in repo! Loading sample data for demo...")
+        data = """Country/Region,Confirmed,Deaths,Recovered,Active
+Afghanistan,36263,1269,25198,9796
+Brazil,2442375,87618,1846641,508116
+US,4290259,148011,1325804,2816444
+India,1480073,33408,951166,495499
+UK,301708,45844,1437,254427"""
+        df = pd.read_csv(io.StringIO(data))
     
     # Filter needed columns
     df = df[['Country/Region', 'Confirmed', 'Deaths', 'Recovered', 'Active']].dropna()
-    
-    # Stress Index Logic
+    # Stress Index Formula
     df['Stress_Index'] = (df['Confirmed'] * 0.4) + (df['Deaths'] * 0.4) + (df['Active'] * 0.2)
     return df
 
 df_data = load_data()
 
-# --- Sidebar ---
+# --- Sidebar Controls ---
 st.sidebar.header("Configuration")
 algo_choice = st.sidebar.selectbox(
     "Select Algorithm",
@@ -56,8 +60,7 @@ cols = ['Confirmed', 'Deaths', 'Recovered', 'Active', 'Stress_Index']
 df_scaled = scaler.fit_transform(df_data[cols])
 
 # --- Clustering Logic ---
-if algo_choice in ["K-Means", "K-Medoids", "Gaussian Mixture", "BIRCH"]:
-    k = st.sidebar.slider("Number of Clusters", 2, 5, 3)
+k = st.sidebar.slider("Clusters (if applicable)", 2, 5, 3)
 
 if algo_choice == "K-Means":
     model = KMeans(n_clusters=k, random_state=42, n_init=10)
@@ -83,7 +86,7 @@ elif algo_choice == "BIRCH":
 
 df_data['Cluster'] = labels.astype(str)
 
-# Map labels to Stress Levels based on Cluster Mean
+# Map labels to Stress Levels
 means = df_data.groupby('Cluster')['Stress_Index'].mean().sort_values()
 stress_map = {cluster: "Low Stress" for cluster in means.index}
 if len(means) > 1:
@@ -93,21 +96,21 @@ if len(means) > 2:
 
 df_data['Stress_Level'] = df_data['Cluster'].map(stress_map)
 
-# --- Layout ---
+# --- Visualization ---
 c1, c2 = st.columns([3, 1])
 
 with c1:
     fig = px.scatter(
         df_data, x="Confirmed", y="Deaths", color="Stress_Level",
         size="Stress_Index", hover_name="Country/Region",
-        title=f"Clustering Result: {algo_choice}",
+        title=f"Results using {algo_choice}",
         template="plotly_white",
         color_discrete_map={"Low Stress": "green", "Medium Stress": "orange", "High Stress": "red"}
     )
     st.plotly_chart(fig, use_container_width=True)
 
 with c2:
-    st.subheader("Metrics")
+    st.subheader("Clustering Score")
     try:
         score = silhouette_score(df_scaled, labels)
         st.metric("Silhouette Score", f"{score:.3f}")
@@ -115,5 +118,5 @@ with c2:
         st.write("Score N/A")
 
 st.divider()
-st.subheader("Data Analysis Table")
+st.subheader("Data Table")
 st.dataframe(df_data[['Country/Region', 'Stress_Index', 'Stress_Level']].sort_values(by="Stress_Index", ascending=False), use_container_width=True)
